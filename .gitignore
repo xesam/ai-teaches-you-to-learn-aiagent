@@ -6,4 +6,5 @@ superpowers/
 \.*
 !.gitignore
 !.gitkeep
+!.env.example
 mcp_demo.txt
