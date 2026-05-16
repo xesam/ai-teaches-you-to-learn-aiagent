@@ -5,8 +5,8 @@ from openai import OpenAI
 load_dotenv()
 
 client = OpenAI(
-    api_key=os.getenv("ZHIPU_API_KEY"),
-    base_url="https://open.bigmodel.cn/api/paas/v4/"
+    api_key=os.getenv("LLM_API_KEY"),
+    base_url=os.getenv("LLM_BASE_URL")
 )
 
 # 初始化对话历史，包含系统提示
@@ -35,7 +35,7 @@ while True:
 
     # 发送完整对话历史给 GPT
     response = client.chat.completions.create(
-        model="glm-4-flash",
+        model=os.getenv("LLM_MODEL"),
         max_tokens=1024,
         temperature=0.7,
         messages=messages

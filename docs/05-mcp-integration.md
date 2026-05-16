@@ -171,12 +171,15 @@ class MCPClient:
             "protocolVersion": "2024-11-05",
             "capabilities": {}
         })
-        
-        # 3. 获取 Server 提供的能力
+
+        # 3. 发送 initialized 通知（注意：是通知不是请求，没有 id、不等响应）
+        connection.notify("notifications/initialized", {})
+
+        # 4. 获取 Server 提供的能力
         tools_list = connection.call("tools/list", {})
         resources_list = connection.call("resources/list", {})
         
-        # 4. 转换为我们的格式
+        # 5. 转换为我们的格式
         self._register_tools(server_name, tools_list)
         self._register_resources(server_name, resources_list)
         
@@ -257,19 +260,43 @@ def connect(self, server_name: str, command: list):
         command, stdin=PIPE, stdout=PIPE, text=True
     )
 
-    # 2. JSON-RPC 握手
+    # 2. JSON-RPC 握手第一步：发送 initialize 请求
     self._call_jsonrpc(process, "initialize", {
         "protocolVersion": "2024-11-05",
         "capabilities": {}
     })
 
-    # 3. 获取工具列表
+    # 3. 握手第二步：发送 initialized 通知（不是请求！没有 id、不等响应）
+    self._send_notification(process, "notifications/initialized", {})
+
+    # 4. 获取工具列表
     tools_result = self._call_jsonrpc(process, "tools/list", {})
 
-    # 4. 逐个注册工具
+    # 5. 逐个注册工具
     for mcp_tool in tools_result["tools"]:
         self._register_tool(server_name, mcp_tool, process)
 ```
+
+### MCP 握手的本质：三步，不是一步
+
+很多人第一次看 MCP 实现，会以为握手就是"发一个 `initialize`、拿到响应、开始用"。但完整握手其实是**三步**：
+
+1. **client → server**：`initialize` 请求 —— 告诉 server"我支持的协议版本是 X，我的能力是 Y"
+2. **server → client**：响应 —— server 返回它自己的版本、能力、信息
+3. **client → server**：`notifications/initialized` **通知** —— 告诉 server"我看到你的响应了，可以正式开始用了"
+
+这里藏着一个 JSON-RPC 协议的本质细节：**第 3 步是通知（notification），不是请求（request）**。这两种消息的形态是不同的：
+
+| 类型 | 有 id 吗 | server 会回响应吗 | 适用场景 |
+|---|---|---|---|
+| **请求**（request） | 有 | 会 | 我需要拿到一个结果，比如调用工具 |
+| **通知**（notification） | 没有 | 不会 | 我只是告诉你一件事，不等你回话 |
+
+这就是为什么 v6 代码里专门有两个方法 —— `_call_jsonrpc` 处理请求（发完读 stdout 拿响应），`_send_notification` 处理通知（发完就返回，没有响应可读）。两者用同一个方法实现不了，因为它们在协议层就是不同形态的消息。
+
+**漏掉第 3 步会怎样？** 对宽松的 server（比如 `@modelcontextprotocol/server-filesystem`）能跑通 —— 它不在乎你有没有发 `initialized`，照样接受后续请求。但对严格按 spec 实现的 server，它会一直等着你发 `initialized`，没收到就拒绝处理 `tools/list` 之类的请求，于是客户端就卡死在握手阶段。
+
+所以握手三步**不是冗余设计**：它确立了一个清晰的协议状态机 —— 在 `initialized` 之前，连接处于"协商中"，只能交换版本信息；在 `initialized` 之后，连接才进入"工作中"，可以用所有能力。漏掉中间这一步，就是把状态机砍掉了。
 
 ### 核心函数 2：`_register_tool()` — 格式转换
 

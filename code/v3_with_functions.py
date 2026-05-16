@@ -134,7 +134,7 @@ def execute_single_call(
     tools: list,
     functions: dict,
     system_prompt: str = None,
-    model: str = "glm-4-flash",
+    model: str = None,
     verbose: bool = False
 ) -> str:
     """
@@ -152,6 +152,8 @@ def execute_single_call(
     Returns:
         模型的最终回复
     """
+    model = model or os.getenv("LLM_MODEL")
+
     # 构建完整的 system prompt
     tools_prompt = build_tools_prompt(tools)
     full_system_prompt = f"{system_prompt}\n\n{tools_prompt}" if system_prompt else tools_prompt
@@ -219,8 +221,8 @@ def execute_single_call(
 if __name__ == "__main__":
     # 初始化客户端
     client = OpenAI(
-        api_key=os.getenv("ZHIPU_API_KEY"),
-        base_url="https://open.bigmodel.cn/api/paas/v4/"
+        api_key=os.getenv("LLM_API_KEY"),
+        base_url=os.getenv("LLM_BASE_URL")
     )
 
     # 定义工具函数

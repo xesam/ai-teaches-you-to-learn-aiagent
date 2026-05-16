@@ -81,7 +81,7 @@ graph TD
 
 ---
 
-## 3. v1 代码讲解：Hello GPT
+## 3. v1 代码讲解：Hello LLM
 
 完整代码在 `code/v1_hello_gpt.py`，运行方式：
 ```bash
@@ -91,19 +91,22 @@ python code/v1_hello_gpt.py
 ### 逐行解析
 
 ```python
-from dotenv import load_dotenv  # 从.env文件加载环境变量
 import os
+from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()  # 读取.env文件，把 API Key 加入环境变量
+load_dotenv()  # 把 .env 里的变量加载到 os.environ
 
-# 创建客户端（这里使用智谱的兼容接口；也可替换成其他 OpenAI 兼容厂商）
-client = OpenAI()
+# 创建客户端：api_key 和 base_url 都从环境变量读，不写死任何一家厂商
+client = OpenAI(
+    api_key=os.getenv("LLM_API_KEY"),
+    base_url=os.getenv("LLM_BASE_URL"),
+)
 
 # 发送一条消息，获取回复
 response = client.chat.completions.create(
-    model="gpt-4o-mini",          # 使用的模型（mini版更便宜，适合学习）
-    max_tokens=1024,               # 最多生成多少个Token
+    model=os.getenv("LLM_MODEL"),     # 模型名也从环境变量读
+    max_tokens=1024,                   # 最多生成多少个 token
     messages=[
         {"role": "user", "content": "用一句话解释什么是人工智能"}
     ]
@@ -112,6 +115,8 @@ response = client.chat.completions.create(
 # 从响应中提取文本内容
 print(response.choices[0].message.content)
 ```
+
+注意：所有"和厂商相关"的配置（key、base_url、模型名）都通过 `os.getenv` 从 `.env` 读取。这就是项目"不绑定某一家厂商"的具体实现 —— 代码里没有任何厂商的硬编码字符串。
 
 ### 响应对象结构
 
@@ -170,22 +175,22 @@ messages = [
 
 | 参数 | 含义 | 推荐值 |
 |------|------|--------|
-| `model` | 使用的GPT模型 | `gpt-4o-mini`（便宜）或 `gpt-4o`（更强） |
-| `max_tokens` | 最大输出长度 | 512~2048 |
-| `temperature` | 随机性（0=确定，2=随机） | 教学用0.7，代码生成用0.2 |
+| `model` | 使用的模型名 | 从 `LLM_MODEL` 环境变量读，由你在 `.env` 里指定 |
+| `max_tokens` | 单次回复最大输出长度（token 数） | 512 ~ 2048 |
+| `temperature` | 随机性（0 = 确定，2 = 随机） | 教学场景 0.7，代码生成 0.2 |
 
 ---
 
 ## 5. 常见问题
 
 **Q: API Key 在哪里获取？**
-A: 登录 platform.openai.com → API Keys → Create new secret key
+A: 看你用哪家厂商。`.env.example` 默认指向智谱（注册后在控制台拿 key），但只要是兼容 OpenAI 风格 API 的厂商都可以，改 `LLM_BASE_URL` 和 `LLM_API_KEY` 即可。
 
-**Q: 调用一次 API 要花多少钱？**
-A: gpt-4o-mini 约 $0.00015/1K tokens，一次普通对话大约 $0.0001，非常便宜。
+**Q: 一次 API 调用要花多少钱？**
+A: 取决于厂商和模型。教学场景多数厂商的小模型每次调用都在分级，足够学习用。具体定价看你选的那家厂商的控制台。
 
 **Q: 为什么每次都要发送完整对话历史？**
-A: GPT 是无状态的（stateless），每次请求都是独立的，它不知道之前说了什么。上下文管理完全是你的代码责任。
+A: 大模型本身是无状态的（stateless），每次请求都是独立的，它不知道之前说了什么。上下文管理完全是你的代码责任。这是 v2 的核心。
 
 **Q: temperature 设为 0 是什么效果？**
 A: 输出几乎固定（贪婪解码），适合需要确定性回答的场景（如代码生成、数据提取）。

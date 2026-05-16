@@ -69,20 +69,26 @@ class MCPClient:
         print(f"[MCP] {server_name} 初始化成功")
         print(f"[MCP] Server 信息: {init_result.get('serverInfo', {})}")
 
-        # 3. 获取工具列表
+        # 3. 握手第三步：发送 initialized 通知，告诉 server 我已准备好
+        self._send_notification(process, "notifications/initialized", {})
+
+        # 4. 获取工具列表
         tools_result = self._call_jsonrpc(process, "tools/list", {})
         mcp_tools = tools_result.get("tools", [])
 
         print(f"[MCP] 发现 {len(mcp_tools)} 个工具")
 
-        # 4. 转换并注册工具
+        # 5. 转换并注册工具
         for mcp_tool in mcp_tools:
             self._register_tool(server_name, mcp_tool, process)
 
         print(f"[MCP] {server_name} 连接完成\n")
 
     def _call_jsonrpc(self, process, method: str, params: dict) -> dict:
-        """发送 JSON-RPC 2.0 请求"""
+        """发送 JSON-RPC 2.0 请求（request）
+
+        请求必须带 id，发出后必须等服务端响应。
+        """
         self.request_id += 1
         request = {
             "jsonrpc": "2.0",
@@ -107,6 +113,24 @@ class MCPClient:
             raise Exception(f"MCP 错误: {response['error']}")
 
         return response.get("result", {})
+
+    def _send_notification(self, process, method: str, params: dict) -> None:
+        """发送 JSON-RPC 2.0 通知（notification）
+
+        通知和请求的本质区别：
+        - 请求（request）：必须带 id，发出后必须等服务端响应
+        - 通知（notification）：没有 id，发出去就完事，服务端也不会回响应
+
+        initialize 完成后，MCP 客户端必须发一个 notifications/initialized
+        通知告诉 server"我准备好了"，server 才认为握手完成。
+        """
+        notification = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params
+        }
+        process.stdin.write(json.dumps(notification) + "\n")
+        process.stdin.flush()
 
     def _register_tool(self, server_name: str, mcp_tool: dict, process):
         """将 MCP 工具转换为 AgentLoop 框架格式"""

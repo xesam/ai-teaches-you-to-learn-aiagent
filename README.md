@@ -1,152 +1,132 @@
 # 从零理解 AI Agent：一个给初学者的教学项目
 
-这个项目的目标不是做一个复杂的商用产品，而是带你**一步一步搭出一个最小可用的 AI Agent**，从而真正理解它的工作原理。
+这个项目带你**一步一步搭出一个最小可用的 AI Agent**，从最简单的"调一次模型 API"，到能自主多步推理、能动态接入外部工具、能加载可复用行为模块。整个过程不靠任何 Agent 框架替你封装，全部用 Python 手搓。
 
-如果你已经会 Python 基础语法，这个项目会带你理解：
+## 项目特点
 
-- 怎么调用大模型 API
-- 怎么实现多轮对话
-- 怎么让模型调用你写的函数
-- 什么是 Agent 循环
-- 怎么把这些能力组合成一个简单但真实可用的工具
-
-## 这个项目的设计原则
-
-本项目有一个刻意的限制：
-
-**只依赖最基础的对话 API，通过提示词、消息历史和 Python 代码，手动实现 Function Calling、Agent 循环、Skill 加载与 MCP 集成。**
+**只靠最基础的对话 API，手动实现 tool、agent loop、MCP、Skill。**
 
 这意味着：
 
-- 不依赖任何厂商提供的原生 `tools` / `function calling` / `skills` / `agents` 特性
-- 不依赖第三方 Agent 框架来替你完成核心逻辑
-- 重点是让你看清这些能力背后的**通用原理**
+- 不依赖厂商提供的原生 `tools` / `function calling` / `agents` / `skills` 特性
+- 不依赖任何第三方 Agent 框架来替你完成核心逻辑
+- 全部能力都通过 **system prompt + 消息历史 + Python 代码 + 循环控制** 拼出来
 
-也正因为这样，这个项目更像"教学版剖面图"，而不是一个现成的生产级框架。
+为什么这样做？因为很多人用 Agent 框架做出过东西，但说不清这些热门词汇背后到底是什么机制。这个项目的目标，就是让你从代码层面看清：
 
-## 这个项目适合谁
+- **tool** 的本质 = 在 system prompt 里描述工具 + 解析模型输出 + 调用 Python 函数 + 回灌结果
+- **agent loop** 的本质 = 在 tool 调用外面套一个 `while`，直到模型不再请求工具
+- **MCP** 的本质 = 通过 JSON-RPC over stdio 让外部进程告诉你它提供哪些工具
+- **Skill** 的本质 = 运行时按需把一段 markdown 注入到 system prompt 里
+
+每个版本只新增一个核心概念，整个项目像"教学版剖面图"，不是生产级框架。
+
+## 适合谁
 
 适合你，如果你：
 
-- 会 Python 基础语法
-- 看得懂函数、类、循环、字典
-- 想理解 AI Agent 的原理，而不是直接依赖现成框架
+- 会 Python 基础语法，看得懂函数、类、循环、字典
+- 用过 ChatGPT / Cursor 这类工具，但想搞懂背后的 Agent 机制
+- 不满足于"调 LangChain 跑一个 demo"，想从零搭一遍
 - 愿意边读文档、边运行代码、边自己思考
-
-## 运行前提 / 兼容厂商
-
-运行这个项目，你至少需要：
-
-- Python 3.9+
-- 一个可用的模型 API Key
-- 对应厂商提供的 **OpenAI 兼容对话 API**
-
-本仓库当前默认示例使用的是：
-
-- `ZHIPU_API_KEY`
-- 智谱的 `base_url`
-- `glm-*` 系列模型名
-
-但这只是示例配置，不是项目原理的一部分。  
-只要某家模型厂商兼容 OpenAI 风格的对话 API，通常都可以通过替换下面这三项接入：
-
-- `api_key`
-- `base_url`
-- `model`
-
-也就是说，这个项目不绑定某一家模型厂商，重点是理解通用机制。
-
-## 学习路线
-
-这个项目按版本递进。**每一版只比上一版多一个关键能力。**
-
-| 版本 | 文件 | 这一版只新增了什么 |
-|------|------|-------------------|
-| v1 | `code/v1_hello_gpt.py` | 让 Python 和大模型对话 |
-| v2 | `code/v2_conversation.py` | 记住前面的聊天记录 |
-| v3 | `code/v3_with_functions.py` | 让模型“使用工具” |
-| v4 | `code/v4_agent_loop.py` | 让模型连续多步完成任务 |
-| v5 | `code/v5_web_summarizer.py` | 把前面的能力组合成网页总结器 |
-| v6 | `code/v6_mcp_agent.py` | 用统一协议接入外部工具 |
-| v7 | `code/v7_agent_with_skills.py` | 给 Agent 增加可复用的行为模块 |
-
-推荐按下面顺序学习：
-
-- 主线必学：`v1 -> v2 -> v3 -> v4 -> v5`
-- 进阶扩展：`v6 -> v7`
-
-如果你的目标是先搞懂 Agent 的核心原理，那么学完 `v5` 就已经足够。  
-更完整的原理讲解见 [docs/00-overview.md](/Users/edy/Documents/repos/ai-teaches-me-to-learn-ai/docs/00-overview.md:1)。
-
-## 项目结构
-
-```bash
-code/
-  v1_hello_gpt.py
-  v2_conversation.py
-  v3_with_functions.py
-  v4_agent_loop.py
-  v5_web_summarizer.py
-  v6_mcp_agent.py
-  v7_agent_with_skills.py
-
-docs/
-  00-overview.md
-  01-api-basics.md
-  02-function-calling.md
-  03-agent-loop.md
-  04-web-summarizer.md
-  05-mcp-integration.md
-  06-skills.md
-
-skills/
-  code_explainer.md
-  web_summarizer.md
-```
-
-- `code/`：每个版本的代码实现
-- `docs/`：每个版本对应的讲解文档
-- `skills/`：Skill 示例文件
 
 ## 快速开始
 
-### 1. 安装依赖
+只需要 4 步就能从零跑通第一版。
+
+### 1. 创建并激活 Python 虚拟环境
+
+需要 Python 3.9+。在项目根目录下：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate   # macOS / Linux
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+```
+
+激活后命令行前面会多一个 `(.venv)`，表示后续 `python`、`pip` 都用的是虚拟环境里的版本。
+
+### 2. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 配置 API Key
+### 3. 配置大模型
+
+本项目通过 3 个环境变量配置大模型，全部从 `.env` 读取，代码里不写死：
+
+| 变量 | 作用 |
+|------|------|
+| `LLM_API_KEY` | 厂商 API Key |
+| `LLM_BASE_URL` | OpenAI 兼容接口的 base URL |
+| `LLM_MODEL` | 模型名 |
+
+复制示例文件：
 
 ```bash
 cp .env.example .env
 ```
 
-然后编辑 `.env`，填入你的 API Key。
+然后编辑 `.env`，把 `LLM_API_KEY` 改成你自己的 key。`.env.example` 默认用智谱 GLM 作为开箱示例（注册一个智谱账户就能拿到免费 key）：
 
-### 3. 从第一版开始
-
-先读总览文档：
-
-```bash
-open docs/00-overview.md
+```
+LLM_API_KEY=your-api-key-here
+LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4/
+LLM_MODEL=glm-4-plus
 ```
 
-再运行第一版代码：
+**换厂商怎么办？** 只要厂商提供 OpenAI 兼容的对话 API，把这 3 个值改掉就行 —— 这就是项目"不绑定某一家厂商"的真正含义。比如换成 DeepSeek、Moonshot、OpenAI 本家，只用改 base_url、key、模型名。
+
+> **提示**：v3 之后会要求模型按特定 JSON 格式输出工具调用。如果你用的模型指令遵循能力较弱（比如 `glm-4-flash`），可能会偶尔不按格式输出导致工具调不起来。换成更强的模型（如 `glm-4-plus`）通常能解决。
+
+### 4. 跑第一版
 
 ```bash
 python code/v1_hello_gpt.py
 ```
 
+看到模型回复 + token 数，说明环境通了。然后按学习路线一版一版往下走。
+
+## 学习路线
+
+整个项目按版本递进，**每一版只比上一版多一个关键能力**：
+
+| 版本 | 文件 | 这一版只新增了什么 | 对应文档 |
+|------|------|-------------------|---------|
+| v1 | `code/v1_hello_gpt.py` | 让 Python 和大模型对话 | [01-api-basics.md](docs/01-api-basics.md) |
+| v2 | `code/v2_conversation.py` | 记住前面的聊天记录 | [01-api-basics.md](docs/01-api-basics.md) |
+| v3 | `code/v3_with_functions.py` | 让模型"使用工具" | [02-function-calling.md](docs/02-function-calling.md) |
+| v4 | `code/v4_agent_loop.py` | 让模型连续多步完成任务 | [03-agent-loop.md](docs/03-agent-loop.md) |
+| v5 | `code/v5_web_summarizer.py` | 把前面的能力组合成网页总结器 | [04-web-summarizer.md](docs/04-web-summarizer.md) |
+| v6 | `code/v6_mcp_agent.py` | 用统一协议接入外部工具 | [05-mcp-integration.md](docs/05-mcp-integration.md) |
+| v7 | `code/v7_agent_with_skills.py` | 给 Agent 增加可复用的行为模块 | [06-skills.md](docs/06-skills.md) |
+
+推荐顺序：
+
+- **主线必学**：`v1 → v2 → v3 → v4 → v5` —— 学完就理解了 Agent 的核心原理
+- **进阶扩展**：`v6 → v7` —— 学完就理解了工具接入和行为策略怎么模块化
+
+学完主线之前，推荐先读 [docs/00-overview.md](docs/00-overview.md) 把整体脉络打通。
+
+**v6 额外要求**：需要本机装有 Node.js（v6 用 `npx` 启动 MCP 文件系统 server）。
+
 ## 建议学习方法
 
-推荐你每一版都按下面顺序学习：
+对每一版，按下面顺序学：
 
-1. 先看这一版对应的文档
+1. 先读对应章节的文档
 2. 再运行代码，看实际输出
-3. 再阅读代码
-4. 最后回答这 3 个问题
+3. 再回头读代码
+4. 最后回答这 3 个问题：
+   - 这一版解决了什么问题？
+   - 它只比上一版多了什么能力？
+   - 如果没有这一版，下一版为什么做不出来？
 
-- 这一版解决了什么问题？
-- 它只比上一版多了什么能力？
-- 如果没有这一版，下一版为什么做不出来？
+## 项目结构
+
+```
+code/      # 每一版的代码实现（v1 ~ v7）
+docs/      # 每一版对应的讲解文档
+skills/    # v7 用到的 Skill 示例文件
+```

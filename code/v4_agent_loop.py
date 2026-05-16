@@ -31,7 +31,7 @@ class AgentLoop:
         functions: Dict[str, Callable],
         system_prompt: Optional[str] = None,
         max_iterations: int = 10,
-        model: str = "glm-4-flash",
+        model: Optional[str] = None,
         max_tokens: int = 1024,
         verbose: bool = False
     ):
@@ -39,13 +39,13 @@ class AgentLoop:
         self.functions = functions
         self.user_system_prompt = system_prompt
         self.max_iterations = max_iterations
-        self.model = model
+        self.model = model or os.getenv("LLM_MODEL")
         self.max_tokens = max_tokens
         self.verbose = verbose
 
         self.client = OpenAI(
-            api_key=os.getenv("ZHIPU_API_KEY"),
-            base_url="https://open.bigmodel.cn/api/paas/v4/"
+            api_key=os.getenv("LLM_API_KEY"),
+            base_url=os.getenv("LLM_BASE_URL")
         )
 
         self.tools_prompt = build_tools_prompt(self.tools)

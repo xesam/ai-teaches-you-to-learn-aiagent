@@ -166,7 +166,7 @@ class AgentLoop:
         for iteration in range(self.max_iterations):
             # 调用 LLM
             response = client.chat.completions.create(
-                model="glm-4-flash",
+                model=os.getenv("LLM_MODEL"),
                 messages=messages
             )
             
