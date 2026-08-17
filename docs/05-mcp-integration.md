@@ -9,7 +9,7 @@
 
 ---
 
-## 0. 这一章不是在“切换到原生 MCP Agent”
+## 0. 这一章不是在”切换到原生 MCP Agent”
 
 这一章很容易让人误解成：
 
@@ -67,6 +67,12 @@ mcp_client.connect("database-server")
 所以这里学到的重点不是“怎么使用某个平台已经封装好的 MCP 功能”，而是：
 
 **如果没有现成平台帮你封装，MCP 能力怎么接到你自己的 Agent 框架里。**
+
+### 关于 Node.js 依赖
+
+v6 的主示例 `v6_mcp_agent.py` 使用了 `@modelcontextprotocol/server-filesystem`，这是一个 npm 包，所以需要 Node.js 环境。
+
+但**理解 MCP 协议本身不需要 Node.js**。Node.js 只是为了跑这个特定的文件系统 Server。如果你暂时不想装 Node.js，可以先用 `v6_mcp_mock_server.py`（纯 Python）理解协议。
 
 ---
 
@@ -246,10 +252,35 @@ print(response)
 
 ## 5. v6 代码讲解：`code/v6_mcp_agent.py`
 
-运行方式（需要先安装 Node.js）：
+### 快速开始：先跑通再理解
+
+如果你想先看到效果，可以直接跑通这个最小示例：
+
 ```bash
+# 方式 1：使用纯 Python Mock Server（无需 Node.js）
+# 终端 1：启动 Mock Server
+python code/v6_mcp_mock_server.py
+
+# 终端 2：修改 v6_mcp_agent.py 连接 Mock Server
+# 把 mcp.connect() 的 command 参数改为：
+# command=["python", "code/v6_mcp_mock_server.py"]
+python code/v6_mcp_agent.py
+
+# 方式 2：使用真实的文件系统 Server（需要 Node.js）
 python code/v6_mcp_agent.py
 ```
+
+看到 Agent 能调用 MCP Server 提供的工具（如 `echo`、`add`），说明通了。
+
+### 阅读建议
+
+v6 涉及 JSON-RPC 协议和进程通信，概念跳跃较大。建议按以下顺序理解：
+
+1. **先跑通**：运行上面的示例，看到 Agent 能调工具
+2. **理解转换**：看 `_register_tool()` 如何把 MCP 格式转成我们的格式
+3. **深入协议**：再理解三步握手、JSON-RPC 请求/通知的区别
+
+不必一次全懂，先建立整体印象。
 
 ### 核心函数 1：`connect()` — 连接并发现工具
 

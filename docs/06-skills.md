@@ -70,7 +70,26 @@ tools = [
 | **定义** | 单个函数，做一件事 | 行为模式，包含策略和风格 |
 | **内容** | 函数签名 + 描述 | 系统指令 + 工具组合 + 输出格式 |
 | **粒度** | 原子操作 | 组合任务 |
-| **示例** | `fetch_webpage(url)` | web_summarizer（使用 fetch_webpage，按特定格式输出摘要）|
+| **项目示例** | `fetch_webpage(url)` | `web_summarizer`（调用 fetch_webpage + 按特定格式输出）|
+
+**具体对比**：
+
+- **Tool: fetch_webpage**
+  ```python
+  def fetch_webpage(url: str) -> str:
+      """抓取网页内容并提取纯文本"""
+      # 返回页面标题和正文
+  ```
+  → 只负责"拿到网页内容"这一件事
+
+- **Skill: web_summarizer**
+  ```markdown
+  你现在是一个网页总结专家。当用户提供 URL 时：
+  1. 使用 fetch_webpage 工具获取内容
+  2. 提取核心观点（3-5 个）
+  3. 按以下格式输出：...
+  ```
+  → 定义了"怎么用 fetch_webpage"+"输出什么格式"+"什么风格"
 
 **类比**：Tool 是锤子、螺丝刀；Skill 是"装修"（知道什么时候用锤子，什么时候用螺丝刀，按什么顺序）。
 
@@ -196,6 +215,32 @@ if tool_name == "activate_skill":
     }
     # 下一次迭代 LLM 就能看到新指令了
 ```
+
+#### 为什么必须立即更新系统提示？
+
+Skill 被激活后，如果不立即重建 `messages[0]`，会发生什么？
+
+**场景**：用户说"激活 web_summarizer 并总结 example.com"
+
+```
+不立即更新的后果：
+1. LLM 调用 activate_skill("web_summarizer")
+2. SkillManager 标记 Skill 已激活
+3. 但 messages[0] 还是旧的系统提示（没有 web_summarizer 指令）
+4. LLM 下一次迭代看到的系统提示仍然没有 Skill 指令
+5. LLM 不知道该按什么格式输出，直接返回普通总结
+
+立即更新的结果：
+1. LLM 调用 activate_skill("web_summarizer")
+2. SkillManager 标记 Skill 已激活
+3. 立即重建 messages[0]，注入 web_summarizer 指令
+4. LLM 下一次迭代就能看到新指令
+5. LLM 按 Skill 要求的格式输出摘要
+```
+
+这就是为什么 v7 在每次 `activate_skill` 后都立即更新 `messages[0]`。
+
+
 
 #### 为什么这里是整体重写 `run()`，而不是小改一下？
 

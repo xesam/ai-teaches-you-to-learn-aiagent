@@ -7,6 +7,16 @@ v6: MCP 协议集成
 - 示例：文件系统 MCP Server 集成
 
 架构：MCP Server → MCPClient（转换） → AgentLoop（v4） → Function Calling（v3）
+
+运行方式：
+方式 1（推荐初学）：先用 v6_mcp_mock_server.py 理解协议，无需 Node.js
+  # 终端 1
+  python code/v6_mcp_mock_server.py
+  # 终端 2（修改下面 mcp.connect() 的 command 参数）
+  python code/v6_mcp_agent.py
+
+方式 2（真实场景）：需要 Node.js，直接运行本文件连接文件系统 Server
+  python code/v6_mcp_agent.py
 """
 
 import json
