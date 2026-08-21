@@ -126,8 +126,6 @@ python code/v1_hello_gpt.py
 
 学完主线之前，推荐先读 [docs/00-overview.md](docs/00-overview.md) 把整体脉络打通。
 
-**v6 额外要求**：需要本机装有 Node.js（v6 用 `npx` 启动 MCP 文件系统 server）。
-
 ## 建议学习方法
 
 对每一版，按下面顺序学：

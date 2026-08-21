@@ -70,7 +70,26 @@ tools = [
 | **定义** | 单个函数，做一件事 | 行为模式，包含策略和风格 |
 | **内容** | 函数签名 + 描述 | 系统指令 + 工具组合 + 输出格式 |
 | **粒度** | 原子操作 | 组合任务 |
-| **示例** | `fetch_webpage(url)` | web_summarizer（使用 fetch_webpage，按特定格式输出摘要）|
+| **项目示例** | `fetch_webpage(url)` | `web_summarizer`（调用 fetch_webpage + 按特定格式输出）|
+
+**具体对比**：
+
+- **Tool: fetch_webpage**
+  ```python
+  def fetch_webpage(url: str) -> str:
+      """抓取网页内容并提取纯文本"""
+      # 返回页面标题和正文
+  ```
+  → 只负责"拿到网页内容"这一件事
+
+- **Skill: web_summarizer**
+  ```markdown
+  你现在是一个网页总结专家。当用户提供 URL 时：
+  1. 使用 fetch_webpage 工具获取内容
+  2. 提取核心观点（3-5 个）
+  3. 按以下格式输出：...
+  ```
+  → 定义了"怎么用 fetch_webpage"+"输出什么格式"+"什么风格"
 
 **类比**：Tool 是锤子、螺丝刀；Skill 是"装修"（知道什么时候用锤子，什么时候用螺丝刀，按什么顺序）。
 
@@ -107,7 +126,60 @@ tools:
 
 ---
 
-## 4. 架构：三层关系
+## 4. Skill 的生命周期：从文件到激活
+
+一个 Skill 从"磁盘上的 Markdown 文件"变成"影响 LLM 行为的活跃指令"，经历四个阶段：
+
+```mermaid
+flowchart TD
+    subgraph 启动["① 启动时 · 自动 · 一次性"]
+        F["skills/*.md"] -->|"加载到内存<br/>（全部 Skill）"| M["SkillManager.skills"]
+    end
+
+    subgraph 运行["② 运行时 · 按需 · 可多次触发"]
+        M -->|"list_skills<br/>只暴露 name + description"| R["LLM"]
+        R -->|"activate_skill"| A["active_skills"]
+        A -->|"注入到提示词<br/>（仅激活的）"| P["系统提示"]
+        P -->|"下一轮迭代"| R
+    end
+
+    style M fill:#dbeafe,stroke:#3b82f6
+    style A fill:#fef3c7,stroke:#f59e0b
+    style P fill:#dcfce7,stroke:#22c55e
+```
+
+> **核心认知：Skill 不是一次性加载到提示词中的。**
+>
+> 启动时，所有 `.md` 文件被加载进**内存**（`SkillManager.skills` 字典），但此时系统提示里一条 Skill 指令都没有。只有当 LLM 在对话中调用 `activate_skill` 之后，被选中的 Skill 指令才被拼接进 `messages[0]`。
+>
+> 也就是说：**加载到内存 ≠ 注入到提示词。** 中间隔着「激活」这一步，而这正是运行时按需完成的——这就是"动态"二字的含义。
+
+### 阶段一：发现（启动时，自动）
+
+`SkillManager` 初始化时扫描 `skills/` 目录下所有 `.md` 文件。无需注册、无需配置——把文件丢进目录，重启 Agent 即可生效。
+
+### 阶段二：加载（启动时，自动）
+
+`Skill.from_file()` 解析每个文件：
+
+- frontmatter（`---` 之间的 YAML）→ 提取 `name`、`description`、`tools`
+- 正文（`---` 之后的内容）→ 作为指令正文 `instructions`
+
+解析结果以 `name` 为键存入 `SkillManager.skills` 字典。此时所有 Skill 都"已加载、待激活"——但**还没有任何指令进入系统提示**。
+
+### 阶段三：激活（运行时，按需）
+
+对话过程中，LLM 先通过 `list_skills` 工具看到所有已加载 Skill 的名称和描述（仅 name + description，不含指令正文），再调用 `activate_skill("web_summarizer")`。`SkillManager` 把该名称加入 `active_skills` 列表。
+
+### 阶段四：注入与生效（同轮，立即）
+
+激活后，`_build_system_prompt()` 把**所有激活 Skill 的指令**拼进系统提示，立即重写 `messages[0]`。下一轮迭代 LLM 就能看到新指令，无需重新发起对话。
+
+整条链路——**文件 → 内存 → 激活 → 注入 → 生效**——后三个阶段全部发生在运行时。下一节的架构图展示了这些组件之间的协作关系。
+
+---
+
+## 5. 架构：三层关系
 
 ```mermaid
 graph TD
@@ -132,7 +204,9 @@ graph TD
 
 ---
 
-## 5. v7 代码讲解
+## 6. v7 代码讲解
+
+上一节概述了 Skill 的四个生命周期阶段，下面看每个阶段对应的代码实现。
 
 完整代码在 `code/v7_agent_with_skills.py`，运行方式：
 ```bash
@@ -197,6 +271,32 @@ if tool_name == "activate_skill":
     # 下一次迭代 LLM 就能看到新指令了
 ```
 
+#### 为什么必须立即更新系统提示？
+
+Skill 被激活后，如果不立即重建 `messages[0]`，会发生什么？
+
+**场景**：用户说"激活 web_summarizer 并总结 example.com"
+
+```
+不立即更新的后果：
+1. LLM 调用 activate_skill("web_summarizer")
+2. SkillManager 标记 Skill 已激活
+3. 但 messages[0] 还是旧的系统提示（没有 web_summarizer 指令）
+4. LLM 下一次迭代看到的系统提示仍然没有 Skill 指令
+5. LLM 不知道该按什么格式输出，直接返回普通总结
+
+立即更新的结果：
+1. LLM 调用 activate_skill("web_summarizer")
+2. SkillManager 标记 Skill 已激活
+3. 立即重建 messages[0]，注入 web_summarizer 指令
+4. LLM 下一次迭代就能看到新指令
+5. LLM 按 Skill 要求的格式输出摘要
+```
+
+这就是为什么 v7 在每次 `activate_skill` 后都立即更新 `messages[0]`。
+
+
+
 #### 为什么这里是整体重写 `run()`，而不是小改一下？
 
 前面 v5、v6 都做到了"完全不改 v4 的 `AgentLoop`，直接拿来用"。到了 v7，你会发现 `SkillEnabledAgentLoop.run()` 几乎把 v4 循环体重写了一遍。原因是：
@@ -227,7 +327,7 @@ def _build_system_prompt(self, base_prompt=None) -> str:
 
 ---
 
-## 6. 执行流程：激活 Skill 并完成任务
+## 7. 执行流程：激活 Skill 并完成任务
 
 以"激活 web_summarizer 并总结网页"为例：
 
@@ -254,7 +354,7 @@ sequenceDiagram
 
 ---
 
-## 7. 如何添加新 Skill
+## 8. 如何添加新 Skill
 
 只需在 `skills/` 目录创建一个 `.md` 文件：
 
@@ -283,7 +383,7 @@ tools: []
 
 ---
 
-## 8. 与 MCP 的对比
+## 9. 与 MCP 的对比
 
 | | MCP（v6）| Skill（v7）|
 |---|---|---|
@@ -296,7 +396,7 @@ tools: []
 
 ---
 
-## 9. 常见问题
+## 10. 常见问题
 
 **Q: Skill 指令会使系统提示变得很长吗？**
 A: 只有激活的 Skill 才会注入，未激活的不占用上下文。合理设计下不会有问题。
@@ -312,7 +412,7 @@ A: 不直接支持。但 LLM 在一次对话里可以连续调用 `activate_skil
 
 ---
 
-## 10. 总结：迭代演进路线
+## 11. 总结：迭代演进路线
 
 | 版本 | 核心概念 | 复用自 | 新增内容 |
 |------|----------|--------|---------|
