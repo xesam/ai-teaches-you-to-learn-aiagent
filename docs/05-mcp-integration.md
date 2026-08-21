@@ -105,12 +105,6 @@ graph TD
 
 **如果没有现成平台帮你封装，MCP 能力怎么接到你自己的 Agent 框架里。**
 
-### 关于 Node.js 依赖
-
-v6 的主示例 `v6_mcp_agent.py` 使用了 `@modelcontextprotocol/server-filesystem`，这是一个 npm 包，所以需要 Node.js 环境。
-
-但**理解 MCP 协议本身不需要 Node.js**。Node.js 只是为了跑这个特定的文件系统 Server。如果你暂时不想装 Node.js，可以先用 `v6_mcp_mock_server.py`（纯 Python）理解协议。
-
 ---
 
 ## 2. MCP 的构成：Client、Server、传输、协议
@@ -289,23 +283,13 @@ python code/v6_mcp_agent.py
 
 ### 快速开始：先跑通再理解
 
-如果你想先看到效果，可以直接跑通这个最小示例：
+如果你想先看到效果，直接运行：
 
 ```bash
-# 方式 1：使用纯 Python Mock Server（无需 Node.js）
-# 终端 1：启动 Mock Server
-python code/v6_mcp_mock_server.py
-
-# 终端 2：修改 v6_mcp_agent.py 连接 Mock Server
-# 把 mcp.connect() 的 command 参数改为：
-# command=["python", "code/v6_mcp_mock_server.py"]
-python code/v6_mcp_agent.py
-
-# 方式 2：使用真实的文件系统 Server（需要 Node.js）
 python code/v6_mcp_agent.py
 ```
 
-看到 Agent 能调用 MCP Server 提供的工具（如 `echo`、`add`），说明通了。
+本文件会自动启动纯 Python 的 `v6_mcp_mock_server.py` 作为子进程，提供 `echo`、`add`、`greet`、`read_file`、`list_directory`、`write_file` 等工具。看到 Agent 能调用 MCP Server 提供的工具，说明通了。
 
 ### 阅读建议
 
@@ -373,7 +357,7 @@ sequenceDiagram
 
 这就是为什么 v6 代码里专门有两个方法 —— `_call_jsonrpc` 处理请求（发完读 stdout 拿响应），`_send_notification` 处理通知（发完就返回，没有响应可读）。两者用同一个方法实现不了，因为它们在协议层就是不同形态的消息。
 
-**漏掉第 3 步会怎样？** 对宽松的 server（比如 `@modelcontextprotocol/server-filesystem`）能跑通 —— 它不在乎你有没有发 `initialized`，照样接受后续请求。但对严格按 spec 实现的 server，它会一直等着你发 `initialized`，没收到就拒绝处理 `tools/list` 之类的请求，于是客户端就卡死在握手阶段。
+**漏掉第 3 步会怎样？** 对宽松的 server（比如本项目里的 `v6_mcp_mock_server.py`）能跑通 —— 它不在乎你有没有发 `initialized`，照样接受后续请求。但对严格按 spec 实现的 server，它会一直等着你发 `initialized`，没收到就拒绝处理 `tools/list` 之类的请求，于是客户端就卡死在握手阶段。
 
 所以握手三步**不是冗余设计**：它确立了一个清晰的协议状态机 —— 在 `initialized` 之前，连接处于"协商中"，只能交换版本信息；在 `initialized` 之后，连接才进入"工作中"，可以用所有能力。漏掉中间这一步，就是把状态机砍掉了。
 
@@ -425,7 +409,7 @@ def _call_jsonrpc(self, process, method, params):
 
 ```python
 mcp = MCPClient()
-mcp.connect("fs", ["npx", "-y", "@modelcontextprotocol/server-filesystem", "<项目根目录>"])
+mcp.connect("fs", ["python", "code/v6_mcp_mock_server.py"])
 
 agent = AgentLoop(
     tools=mcp.tools,       # MCPClient 生成的工具列表

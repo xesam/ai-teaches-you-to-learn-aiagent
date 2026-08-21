@@ -4,23 +4,20 @@ v6: MCP 协议集成
 在 v4 AgentLoop 框架基础上添加 MCP 协议支持：
 - MCPClient: 连接 MCP Server，动态注册工具
 - 复用 AgentLoop 类：无需修改，直接使用
-- 示例：文件系统 MCP Server 集成
+- 示例：连接纯 Python Mock Server 进行文件系统操作
 
 架构：MCP Server → MCPClient（转换） → AgentLoop（v4） → Function Calling（v3）
 
 运行方式：
-方式 1（推荐初学）：先用 v6_mcp_mock_server.py 理解协议，无需 Node.js
-  # 终端 1
-  python code/v6_mcp_mock_server.py
-  # 终端 2（修改下面 mcp.connect() 的 command 参数）
   python code/v6_mcp_agent.py
 
-方式 2（真实场景）：需要 Node.js，直接运行本文件连接文件系统 Server
-  python code/v6_mcp_agent.py
+  本文件会自动启动纯 Python 的 v6_mcp_mock_server.py 作为子进程，
+  全程不依赖任何外部运行时。
 """
 
 import json
 import subprocess
+import sys
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -43,14 +40,15 @@ class MCPClient:
         self.functions = {}  # 工具名 -> 执行函数
         self.request_id = 0
 
-    def connect(self, server_name: str, command: list, description: str = ""):
+    def connect(self, server_name: str, command: list, description: str = "", cwd: str = None):
         """
         连接到 MCP Server
 
         Args:
             server_name: Server 名称（用于工具命名前缀）
-            command: 启动 Server 的命令（如 ["npx", "-y", "server-name"]）
+            command: 启动 Server 的命令（如 ["python", "code/v6_mcp_mock_server.py"]）
             description: Server 描述（可选）
+            cwd: Server 子进程的工作目录（可选，默认为当前目录）
         """
         print(f"[MCP] 连接到 {server_name}...")
 
@@ -61,7 +59,8 @@ class MCPClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1
+            bufsize=1,
+            cwd=cwd
         )
 
         self.servers[server_name] = process
@@ -201,7 +200,7 @@ class MCPClient:
             print(f"[MCP] 已关闭 {server_name}")
 
 
-# ── 示例：使用 MCP 文件系统 Server ────────────────────────────────────
+# ── 示例：使用纯 Python Mock MCP Server ──────────────────────────────
 
 
 if __name__ == "__main__":
@@ -211,15 +210,15 @@ if __name__ == "__main__":
     mcp = MCPClient()
 
     try:
-        # 连接文件系统 MCP Server（允许访问当前项目目录）
+        # 连接纯 Python Mock Server
         mcp.connect(
             server_name="fs",
             command=[
-                "npx", "-y",
-                "@modelcontextprotocol/server-filesystem",
-                str(project_root)
+                sys.executable,
+                str(Path(__file__).resolve().parent / "v6_mcp_mock_server.py")
             ],
-            description="当前项目目录文件系统操作"
+            description="纯 Python Mock MCP Server（文件系统操作）",
+            cwd=str(project_root)
         )
 
         # 2. 创建 AgentLoop（复用 v4 的 AgentLoop 类）

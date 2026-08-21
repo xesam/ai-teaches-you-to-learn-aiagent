@@ -1,11 +1,16 @@
 """
 v6 补充：纯 Python 的 Mock MCP Server
 
-这是一个教学用的最小 MCP Server 实现，用来演示 MCP 协议本身，
-不需要安装 Node.js。提供几个简单工具供 v6 的 MCPClient 连接。
+这是一个教学用的最小 MCP Server 实现，用来演示 MCP 协议本身。
+全程纯 Python，不依赖任何外部运行时。
 
-如果你想体验真实的 MCP Server（如文件系统操作），
-仍然推荐使用 v6_mcp_agent.py 中的 @modelcontextprotocol/server-filesystem。
+提供以下工具：
+- echo: 回显文本
+- add: 两数求和
+- greet: 生成问候语
+- read_file: 读取文件内容
+- list_directory: 列出目录下的文件
+- write_file: 写入文件内容
 
 运行方式：
 1. 启动 Mock Server（在一个终端）：
@@ -18,6 +23,7 @@ v6 补充：纯 Python 的 Mock MCP Server
 
 import sys
 import json
+import os
 
 
 class MockMCPServer:
@@ -70,6 +76,52 @@ class MockMCPServer:
                     },
                     "required": ["name"]
                 }
+            },
+            {
+                "name": "read_file",
+                "description": "读取指定路径的文件内容",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "要读取的文件路径"
+                        }
+                    },
+                    "required": ["path"]
+                }
+            },
+            {
+                "name": "list_directory",
+                "description": "列出指定目录下的文件和子目录",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "要列出的目录路径"
+                        }
+                    },
+                    "required": ["path"]
+                }
+            },
+            {
+                "name": "write_file",
+                "description": "将内容写入指定路径的文件",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "要写入的文件路径"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "要写入的文件内容"
+                        }
+                    },
+                    "required": ["path", "content"]
+                }
             }
         ]
 
@@ -101,6 +153,25 @@ class MockMCPServer:
             result_text = str(arguments["a"] + arguments["b"])
         elif tool_name == "greet":
             result_text = f"你好，{arguments['name']}！"
+        elif tool_name == "read_file":
+            try:
+                with open(arguments["path"], "r", encoding="utf-8") as f:
+                    result_text = f.read()
+            except Exception as e:
+                result_text = f"读取文件失败：{e}"
+        elif tool_name == "list_directory":
+            try:
+                entries = os.listdir(arguments["path"])
+                result_text = "\n".join(entries)
+            except Exception as e:
+                result_text = f"列出目录失败：{e}"
+        elif tool_name == "write_file":
+            try:
+                with open(arguments["path"], "w", encoding="utf-8") as f:
+                    f.write(arguments["content"])
+                result_text = f"文件已写入：{arguments['path']}"
+            except Exception as e:
+                result_text = f"写入文件失败：{e}"
         else:
             result_text = f"未知工具: {tool_name}"
 
