@@ -126,7 +126,60 @@ tools:
 
 ---
 
-## 4. 架构：三层关系
+## 4. Skill 的生命周期：从文件到激活
+
+一个 Skill 从"磁盘上的 Markdown 文件"变成"影响 LLM 行为的活跃指令"，经历四个阶段：
+
+```mermaid
+flowchart TD
+    subgraph 启动["① 启动时 · 自动 · 一次性"]
+        F["skills/*.md"] -->|"加载到内存<br/>（全部 Skill）"| M["SkillManager.skills"]
+    end
+
+    subgraph 运行["② 运行时 · 按需 · 可多次触发"]
+        M -->|"list_skills<br/>只暴露 name + description"| R["LLM"]
+        R -->|"activate_skill"| A["active_skills"]
+        A -->|"注入到提示词<br/>（仅激活的）"| P["系统提示"]
+        P -->|"下一轮迭代"| R
+    end
+
+    style M fill:#dbeafe,stroke:#3b82f6
+    style A fill:#fef3c7,stroke:#f59e0b
+    style P fill:#dcfce7,stroke:#22c55e
+```
+
+> **核心认知：Skill 不是一次性加载到提示词中的。**
+>
+> 启动时，所有 `.md` 文件被加载进**内存**（`SkillManager.skills` 字典），但此时系统提示里一条 Skill 指令都没有。只有当 LLM 在对话中调用 `activate_skill` 之后，被选中的 Skill 指令才被拼接进 `messages[0]`。
+>
+> 也就是说：**加载到内存 ≠ 注入到提示词。** 中间隔着「激活」这一步，而这正是运行时按需完成的——这就是"动态"二字的含义。
+
+### 阶段一：发现（启动时，自动）
+
+`SkillManager` 初始化时扫描 `skills/` 目录下所有 `.md` 文件。无需注册、无需配置——把文件丢进目录，重启 Agent 即可生效。
+
+### 阶段二：加载（启动时，自动）
+
+`Skill.from_file()` 解析每个文件：
+
+- frontmatter（`---` 之间的 YAML）→ 提取 `name`、`description`、`tools`
+- 正文（`---` 之后的内容）→ 作为指令正文 `instructions`
+
+解析结果以 `name` 为键存入 `SkillManager.skills` 字典。此时所有 Skill 都"已加载、待激活"——但**还没有任何指令进入系统提示**。
+
+### 阶段三：激活（运行时，按需）
+
+对话过程中，LLM 先通过 `list_skills` 工具看到所有已加载 Skill 的名称和描述（仅 name + description，不含指令正文），再调用 `activate_skill("web_summarizer")`。`SkillManager` 把该名称加入 `active_skills` 列表。
+
+### 阶段四：注入与生效（同轮，立即）
+
+激活后，`_build_system_prompt()` 把**所有激活 Skill 的指令**拼进系统提示，立即重写 `messages[0]`。下一轮迭代 LLM 就能看到新指令，无需重新发起对话。
+
+整条链路——**文件 → 内存 → 激活 → 注入 → 生效**——后三个阶段全部发生在运行时。下一节的架构图展示了这些组件之间的协作关系。
+
+---
+
+## 5. 架构：三层关系
 
 ```mermaid
 graph TD
@@ -151,7 +204,9 @@ graph TD
 
 ---
 
-## 5. v7 代码讲解
+## 6. v7 代码讲解
+
+上一节概述了 Skill 的四个生命周期阶段，下面看每个阶段对应的代码实现。
 
 完整代码在 `code/v7_agent_with_skills.py`，运行方式：
 ```bash
@@ -272,7 +327,7 @@ def _build_system_prompt(self, base_prompt=None) -> str:
 
 ---
 
-## 6. 执行流程：激活 Skill 并完成任务
+## 7. 执行流程：激活 Skill 并完成任务
 
 以"激活 web_summarizer 并总结网页"为例：
 
@@ -299,7 +354,7 @@ sequenceDiagram
 
 ---
 
-## 7. 如何添加新 Skill
+## 8. 如何添加新 Skill
 
 只需在 `skills/` 目录创建一个 `.md` 文件：
 
@@ -328,7 +383,7 @@ tools: []
 
 ---
 
-## 8. 与 MCP 的对比
+## 9. 与 MCP 的对比
 
 | | MCP（v6）| Skill（v7）|
 |---|---|---|
@@ -341,7 +396,7 @@ tools: []
 
 ---
 
-## 9. 常见问题
+## 10. 常见问题
 
 **Q: Skill 指令会使系统提示变得很长吗？**
 A: 只有激活的 Skill 才会注入，未激活的不占用上下文。合理设计下不会有问题。
@@ -357,7 +412,7 @@ A: 不直接支持。但 LLM 在一次对话里可以连续调用 `activate_skil
 
 ---
 
-## 10. 总结：迭代演进路线
+## 11. 总结：迭代演进路线
 
 | 版本 | 核心概念 | 复用自 | 新增内容 |
 |------|----------|--------|---------|
